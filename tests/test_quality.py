@@ -32,3 +32,10 @@ def test_complete_tie_is_deterministic():
     a, b = photo("a"), photo("b")
     assert pick_keeper([a, b]) is a and pick_keeper([b, a]) is a
     assert not is_better(a, a)
+
+
+def test_identical_copies_prefer_the_non_backup_path():
+    a = photo("C:/Photos/Backup/IMG_1.jpg")
+    b = photo("C:/Photos/Camera/IMG_1.jpg")
+    c = photo("C:/Photos/Camera/IMG_1 - Copy (2).jpg")
+    assert pick_keeper([a, c, b]) is b

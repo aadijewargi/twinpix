@@ -11,8 +11,10 @@ well as wall time, because the count is what an index actually saves.
 from __future__ import annotations
 
 import argparse
+import json
 import random
 import time
+from pathlib import Path
 
 from twinpix.index import bktree_pairs, brute_force_pairs, mih_pairs
 
@@ -56,10 +58,20 @@ def main() -> None:
     ap.add_argument("--naive-max", type=int, default=5000)
     ap.add_argument("--bktree-max", type=int, default=20000)
     ap.add_argument("--out", default=None, help="write a PNG chart here")
+    ap.add_argument("--results", default=None, help="save raw results as JSON here")
+    ap.add_argument("--plot-from", default=None, help="skip timing; re-plot saved JSON")
     args = ap.parse_args()
     sizes = [int(s) for s in args.sizes.split(",")]
     radii = [int(r) for r in args.radii.split(",")]
 
+    if args.plot_from:
+        rows = json.loads(Path(args.plot_from).read_text())
+        sizes = sorted({row["n"] for row in rows})
+        radii = sorted({row["r"] for row in rows})
+        plot(rows, sizes, radii, args.out)
+        return
+
+    mih_pairs(library_hashes(500), 6)  # warm up NumPy so the first timing is fair
     rows = []
     print("| n | radius | pairs | multi-index hashing | BK-tree | NumPy brute force | naive Python |")
     print("|--:|--:|--:|--:|--:|--:|--:|")
@@ -83,13 +95,20 @@ def main() -> None:
             print(f"| {n:,} | {r} | {len(pairs):,} | {t_mih:.3f} s ({100 * checked / half:.2f} %) "
                   f"| {bk} | {t_bf:.2f} s | {nv} |", flush=True)
 
+    if args.results:
+        Path(args.results).write_text(json.dumps(rows, indent=1))
     if args.out:
+        plot(rows, sizes, radii, args.out)
+
+
+def plot(rows: list[dict], sizes: list[int], radii: list[int], out: str) -> None:
+    if True:
         import matplotlib
 
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
 
-        fig, axes = plt.subplots(1, 2, figsize=(11, 4.2), dpi=150)
+        fig, axes = plt.subplots(1, 2, figsize=(11, 5), dpi=150)
         series = [("mih", "multi-index hashing", "#1a73e8", "o"),
                   ("bf", "NumPy brute force", "#e8710a", "s"),
                   ("bk", "BK-tree", "#9334e6", "D"),
@@ -106,15 +125,23 @@ def main() -> None:
                 pts = [(row["n"], 100 * row[frac]) for row in sub if row.get(frac) is not None]
                 axes[1].plot(*zip(*pts), style, marker=marker, color=color, ms=4,
                              label=f"{label} (r={r})")
-        axes[1].axhline(100, color="#e8710a", lw=1, alpha=0.6)
-        axes[1].text(sizes[0], 70, "brute force = 100 %", color="#e8710a", fontsize=8)
+        axes[1].axhline(100, color="#e8710a", lw=1.2, alpha=0.7, label="brute force (100 %)")
         axes[0].set(xscale="log", yscale="log", xlabel="photos in library",
                     ylabel="seconds to find all pairs", title="All-pairs search time (lower is better)")
         axes[1].set(xscale="log", yscale="log", xlabel="photos in library",
                     ylabel="% of the n(n-1)/2 pairs compared", title="Comparisons actually made")
-        fig.tight_layout()
-        fig.savefig(args.out)
-        print(f"\nchart written to {args.out}")
+        axes[1].set_ylim(0.05, 200)
+        for ax in axes:
+            ax.grid(True, which="major", alpha=0.25)
+            ax.spines[["top", "right"]].set_visible(False)
+        axes[1].legend(frameon=False, fontsize=7.5, loc="center right")
+        fig.legend(*axes[0].get_legend_handles_labels(), frameon=False, fontsize=7.5,
+                   loc="lower center", ncol=4, bbox_to_anchor=(0.5, 0.0))
+        fig.suptitle("Finding every pair of photos within r bits (solid r = 6, dashed r = 10)",
+                     fontsize=10, color="#5f6368")
+        fig.tight_layout(rect=(0, 0.1, 1, 1))
+        fig.savefig(out)
+        print(f"\nchart written to {out}")
 
 
 if __name__ == "__main__":

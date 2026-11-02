@@ -76,7 +76,8 @@ document.querySelectorAll('.group').forEach(g=>{g.style.display=g.dataset.paths.
 """
 
 
-def _photo_card(p: Photo, g: Group, thumbs: dict[str, Optional[str]], root: Path) -> str:
+def _photo_card(p: Photo, g: Group, thumbs: dict[str, Optional[str]], root: Path,
+                link: bool = True) -> str:
     keep = p is g.keeper
     try:
         rel = str(Path(p.path).relative_to(root))
@@ -87,9 +88,12 @@ def _photo_card(p: Photo, g: Group, thumbs: dict[str, Optional[str]], root: Path
     img = f'<img loading="lazy" src="{thumb}" alt="">' if thumb else "<small>no preview</small>"
     dist = g.distances.get(p.path, 0)
     why = "best of group" if keep else f"distance {dist}/64"
+    if link:
+        thumb_html = f'<a class="thumb" href="{html.escape(uri)}" target="_blank">{img}</a>'
+    else:
+        thumb_html = f'<div class="thumb">{img}</div>'
     return (
-        f'<div class="photo {"keep" if keep else "dupe"}">'
-        f'<a class="thumb" href="{html.escape(uri)}" target="_blank">{img}</a>'
+        f'<div class="photo {"keep" if keep else "dupe"}">{thumb_html}'
         f'<div class="meta"><span class="badge">{"KEEP" if keep else "DUPLICATE"}</span>'
         f'<div class="name" title="{html.escape(rel)}">{html.escape(Path(p.path).name)}</div>'
         f"{p.width}&times;{p.height} &middot; {human_bytes(p.size)}<br>"
@@ -99,7 +103,7 @@ def _photo_card(p: Photo, g: Group, thumbs: dict[str, Optional[str]], root: Path
 
 
 def render_report(result: ScanResult, root: Path, threshold: int, algo: str,
-                  elapsed: float = 0.0) -> str:
+                  elapsed: float = 0.0, link_originals: bool = True) -> str:
     root = Path(root).resolve()
     needed = [p.path for g in result.groups for p in g.members]
     with ThreadPoolExecutor(max_workers=8) as pool:
@@ -109,7 +113,7 @@ def render_report(result: ScanResult, root: Path, threshold: int, algo: str,
     for n, g in enumerate(result.groups, 1):
         kind = "identical bytes" if g.identical else f"max distance {g.max_distance}"
         paths = html.escape(" ".join(p.path.lower() for p in g.members))
-        body = "".join(_photo_card(p, g, thumbs, root) for p in [g.keeper, *g.duplicates])
+        body = "".join(_photo_card(p, g, thumbs, root, link_originals) for p in [g.keeper, *g.duplicates])
         cards.append(
             f'<section class="group" data-paths="{paths}"><div class="ghead">'
             f"<div><strong>Group {n}</strong> &middot; {len(g.members)} photos"
@@ -146,7 +150,8 @@ def render_report(result: ScanResult, root: Path, threshold: int, algo: str,
 
 
 def write_report(result: ScanResult, root: Path, out: Path, threshold: int, algo: str,
-                 elapsed: float = 0.0) -> Path:
+                 elapsed: float = 0.0, link_originals: bool = True) -> Path:
     out = Path(out)
-    out.write_text(render_report(result, root, threshold, algo, elapsed), encoding="utf-8")
+    out.write_text(render_report(result, root, threshold, algo, elapsed, link_originals),
+                   encoding="utf-8")
     return out

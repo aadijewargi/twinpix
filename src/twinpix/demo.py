@@ -132,8 +132,10 @@ def make_scene(seed: int) -> Image.Image:
 
 
 def _shift(img: Image.Image, dx: int, dy: int) -> Image.Image:
-    return img.transform(img.size, Image.Transform.AFFINE, (1, 0, dx, 0, 1, dy),
-                         resample=Image.Resampling.BILINEAR)
+    """The camera moved a little: crop a slightly offset window, scale back up."""
+    m = 20  # margin in pixels, larger than any shift we use
+    box = (m + dx, m + dy, img.width - m + dx, img.height - m + dy)
+    return img.crop(box).resize(img.size, Image.Resampling.BICUBIC)
 
 
 def build(out: Path, scenes: int = 40, seed: int = 7) -> dict:
