@@ -121,8 +121,10 @@ def cmd_move(args: argparse.Namespace) -> int:
         print("\n  nothing to move")
         return 0
     verb = "would move" if args.dry_run else "moved"
+    root = Path(args.folder).resolve()
     for plan in plans[:20]:
-        print(f"    {verb}  {plan.src}  ->  {plan.dst}")
+        dst = Path(review.name) / plan.dst.relative_to(review)
+        print(f"    {verb}  {_rel(str(plan.src), root)}  ->  {dst}")
     if len(plans) > 20:
         print(f"    ... and {len(plans) - 20} more")
     print(f"\n  {verb} {len(plans)} duplicates ({human_bytes(sum(p.size for p in plans))}) to {review}")
