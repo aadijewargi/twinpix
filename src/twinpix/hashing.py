@@ -88,10 +88,14 @@ def phash(img: Image.Image, hash_size: int = 8, highfreq_factor: int = 4) -> int
 
 
 def sharpness(img: Image.Image, max_side: int = 512) -> float:
-    """Variance of the Laplacian on a downscaled grey copy.
+    """Contrast-normalised variance of the Laplacian on a downscaled grey copy.
 
-    A standard focus measure: blurry or shaky frames in a burst score low.
-    Downscaling first keeps it fast and makes it ignore JPEG block noise.
+    Variance of the Laplacian is a standard focus measure: blurry or shaky
+    frames in a burst score low. It also grows with the square of image
+    contrast, so it is divided by the pixel variance; otherwise a copy with
+    boosted contrast would look "sharper" than the original. Downscaling
+    first keeps it fast and makes it ignore JPEG block noise. The result is
+    scaled by 1000 to give friendlier numbers.
     """
     grey = to_grey(img)
     grey.thumbnail((max_side, max_side), Image.Resampling.BILINEAR)
@@ -101,7 +105,10 @@ def sharpness(img: Image.Image, max_side: int = 512) -> float:
     lap = (
         px[:-2, 1:-1] + px[2:, 1:-1] + px[1:-1, :-2] + px[1:-1, 2:] - 4.0 * px[1:-1, 1:-1]
     )
-    return float(lap.var())
+    spread = px.var()
+    if spread < 1e-6:  # a flat image has no edges at all
+        return 0.0
+    return float(1000.0 * lap.var() / spread)
 
 
 def open_image(path: Union[str, Path], target: int = 512) -> tuple[Image.Image, tuple[int, int]]:
@@ -112,11 +119,11 @@ def open_image(path: Union[str, Path], target: int = 512) -> tuple[Image.Image, 
     scale, which makes hashing a 24-megapixel photo several times faster.
     """
     img = Image.open(path)
-    full_size = img.size
+    width, height = img.size
+    # EXIF orientations 5-8 store the picture sideways; report displayed size.
+    if img.getexif().get(0x0112, 1) in (5, 6, 7, 8):
+        width, height = height, width
     img.draft("RGB", (target, target))
     img = ImageOps.exif_transpose(img)
-    orientation_swapped = img.size[0] < img.size[1] and full_size[0] > full_size[1]
-    if orientation_swapped or (img.size[0] > img.size[1] and full_size[0] < full_size[1]):
-        full_size = (full_size[1], full_size[0])
     img.load()
-    return img, full_size
+    return img, (width, height)
