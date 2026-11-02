@@ -38,8 +38,8 @@ def _add_scan_options(p: argparse.ArgumentParser) -> None:
                    help="max Hamming distance (0-64) to count as a duplicate (default 10)")
     p.add_argument("--algo", choices=["phash", "dhash"], default="phash",
                    help="perceptual hash to compare (default phash)")
-    p.add_argument("--index", choices=["auto", "bktree", "brute"], default="auto",
-                   help="pair-search strategy (default auto)")
+    p.add_argument("--index", choices=["auto", "mih", "brute", "bktree"], default="auto",
+                   help="pair-search strategy: multi-index hashing, NumPy brute force or BK-tree (default auto)")
     p.add_argument("-j", "--workers", type=int, default=None,
                    help="hashing processes (default: up to 8)")
     p.add_argument("--no-cache", action="store_true", help="don't read or write the hash cache")

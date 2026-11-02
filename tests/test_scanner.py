@@ -126,3 +126,13 @@ def test_pure_byte_copies_form_an_identical_group(tmp_path):
     shutil.copy(tmp_path / "a.jpg", tmp_path / "a - Copy.jpg")
     (g,) = scan(tmp_path, workers=1).groups
     assert g.identical and g.max_distance == 0 and len(g.members) == 2
+
+
+def test_many_identical_hashes_group_in_linear_time():
+    from twinpix.model import Photo
+    from twinpix.scanner import group_photos
+
+    photos = [Photo(f"black_{i:05d}.jpg", 1000 + i, 0, 100, 100, 0, 0, 1.0) for i in range(20000)]
+    photos.append(Photo("other.jpg", 5, 0, 100, 100, (1 << 64) - 1, (1 << 64) - 1, 1.0))
+    (g,) = group_photos(photos, threshold=10)
+    assert len(g.members) == 20000

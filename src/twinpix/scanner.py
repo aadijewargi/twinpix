@@ -172,11 +172,21 @@ def group_photos(
     if algo not in ("phash", "dhash"):
         raise ValueError("algo must be 'phash' or 'dhash'")
     ok = [p for p in photos if p.ok]
-    hashes = [getattr(p, algo) for p in ok]
-    pairs = find_pairs(hashes, threshold, method=method)
-    edges = [(i, j) for i, j, _ in pairs]
+    # Collapse identical hashes first: connectivity only needs one edge per
+    # pair of distinct values, which keeps the search linear in the number of
+    # *distinct* hashes even when thousands of files share one.
+    first_with: dict[int, int] = {}
+    edges: list[tuple[int, int]] = []
+    for idx, p in enumerate(ok):
+        h = getattr(p, algo)
+        rep = first_with.setdefault(h, idx)
+        if rep != idx:
+            edges.append((rep, idx))
+    reps = list(first_with.values())
+    pairs = find_pairs([getattr(ok[i], algo) for i in reps], threshold, method=method)
+    edges += [(reps[i], reps[j]) for i, j, _ in pairs]
 
-    # Byte-identical files always belong together, whatever the threshold.
+    # Byte-identical files always belong together, whatever the hash says.
     by_digest: dict[str, int] = {}
     for idx, p in enumerate(ok):
         if p.digest:

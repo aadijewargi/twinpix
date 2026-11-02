@@ -5,12 +5,12 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "twinpix"
 version = "0.1.0"
-description = "Find near-duplicate photos (bursts, resized and re-saved copies) with perceptual hashing and a BK-tree."
+description = "Find near-duplicate photos (bursts, resized and re-saved copies) with perceptual hashing and multi-index hashing."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "aadijewargi" }]
-keywords = ["duplicates", "photos", "perceptual-hash", "bk-tree", "cli"]
+keywords = ["duplicates", "photos", "perceptual-hash", "bk-tree", "multi-index-hashing", "cli"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
