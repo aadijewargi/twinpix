@@ -16,6 +16,7 @@ class Photo:
     dhash: int = 0
     phash: int = 0
     sharpness: float = 0.0
+    colour: Optional[bytes] = None  # 4x4 chromaticity signature
     error: Optional[str] = None
     digest: Optional[str] = None  # content hash, filled only for same-size files
 
@@ -31,6 +32,7 @@ class Photo:
         d = asdict(self)
         d["dhash"] = f"{self.dhash:016x}"
         d["phash"] = f"{self.phash:016x}"
+        d["colour"] = self.colour.hex() if self.colour else None
         return d
 
 

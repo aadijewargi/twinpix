@@ -18,7 +18,7 @@ from . import __version__
 from .actions import move_duplicates, undo
 from .cache import HashCache
 from .report import human_bytes, write_report
-from .scanner import ScanResult, scan
+from .scanner import DEFAULT_MAX_COLOUR, ScanResult, scan
 
 
 def _progress(done: int, total: int) -> None:
@@ -40,6 +40,8 @@ def _add_scan_options(p: argparse.ArgumentParser) -> None:
                    help="perceptual hash to compare (default phash)")
     p.add_argument("--index", choices=["auto", "mih", "brute", "bktree"], default="auto",
                    help="pair-search strategy: multi-index hashing, NumPy brute force or BK-tree (default auto)")
+    p.add_argument("--no-colour-check", dest="colour_check", action="store_false",
+                   help="don't reject hash matches whose colours differ")
     p.add_argument("-j", "--workers", type=int, default=None,
                    help="hashing processes (default: up to 8)")
     p.add_argument("--no-cache", action="store_true", help="don't read or write the hash cache")
@@ -52,6 +54,7 @@ def _run_scan(args: argparse.Namespace, exclude: Sequence[Path] = ()) -> tuple[S
     cache = None if args.no_cache else HashCache()
     try:
         result = scan(args.folder, threshold=args.threshold, algo=args.algo, method=args.index,
+                      max_colour=DEFAULT_MAX_COLOUR if args.colour_check else None,
                       workers=args.workers, cache=cache, exclude=exclude, progress=_progress)
     finally:
         if cache:
@@ -71,13 +74,21 @@ def _summary(result: ScanResult, elapsed: float) -> str:
     return "\n".join(lines)
 
 
-def _print_groups(result: ScanResult, limit: int = 10) -> None:
+def _rel(path: str, root: Path) -> str:
+    try:
+        return str(Path(path).relative_to(root))
+    except ValueError:
+        return path
+
+
+def _print_groups(result: ScanResult, root: Path, limit: int = 10) -> None:
+    root = Path(root).resolve()
     for n, g in enumerate(result.groups[:limit], 1):
         tag = "identical" if g.identical else f"d<={g.max_distance}"
         print(f"\n  group {n}  ({len(g.members)} photos, {tag})")
-        print(f"    keep  {g.keeper.path}  [{g.keeper.width}x{g.keeper.height}]")
+        print(f"    keep  {_rel(g.keeper.path, root)}  [{g.keeper.width}x{g.keeper.height}]")
         for p in g.duplicates:
-            print(f"    dupe  {p.path}  [{p.width}x{p.height}, d={g.distances[p.path]}]")
+            print(f"    dupe  {_rel(p.path, root)}  [{p.width}x{p.height}, d={g.distances[p.path]}]")
     if len(result.groups) > limit:
         print(f"\n  ... and {len(result.groups) - limit} more groups (see the report)")
 
@@ -86,7 +97,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
     result, elapsed = _run_scan(args)
     print(_summary(result, elapsed))
     if not args.quiet:
-        _print_groups(result)
+        _print_groups(result, args.folder)
     if args.json:
         payload = {
             "root": str(Path(args.folder).resolve()), "threshold": args.threshold, "algo": args.algo,

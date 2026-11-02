@@ -12,7 +12,7 @@ from typing import Callable, Iterable, Optional, Sequence
 from PIL import Image
 
 from .cache import HashCache
-from .hashing import dhash, hamming, open_image, phash, sharpness
+from .hashing import colour_distance, colour_signature, dhash, hamming, open_image, phash, sharpness
 from .index import connected_groups, find_pairs
 from .model import Group, Photo
 from .quality import pick_keeper
@@ -62,6 +62,7 @@ def hash_file(path: str) -> Photo:
         photo.dhash = dhash(img)
         photo.phash = phash(img)
         photo.sharpness = sharpness(img)
+        photo.colour = colour_signature(img)
     except Exception as exc:  # corrupt, truncated or unsupported file
         photo.error = f"{type(exc).__name__}: {exc}"
     return photo
@@ -160,14 +161,26 @@ class ScanResult:
         return sum(len(g.duplicates) for g in self.groups)
 
 
+DEFAULT_MAX_COLOUR = 0.04
+
+
 def group_photos(
-    photos: Sequence[Photo], threshold: int = 10, algo: str = "phash", method: str = "auto"
+    photos: Sequence[Photo],
+    threshold: int = 10,
+    algo: str = "phash",
+    method: str = "auto",
+    max_colour: Optional[float] = DEFAULT_MAX_COLOUR,
 ) -> list[Group]:
     """Group photos whose hashes are within ``threshold`` bits of each other.
 
-    Groups are connected components of the "within threshold" graph, so a
-    chain A~B~C lands in one group even if A and C are further apart; the
-    reported ``max_distance`` makes that visible.
+    Each candidate pair from the hash search is then verified by colour: if
+    the 4x4 chromaticity signatures differ by more than ``max_colour`` the
+    pair is rejected (greyscale hashes cannot tell a red ball from a green
+    one). Pass ``max_colour=None`` to skip the check.
+
+    Groups are connected components of the verified graph, so a chain
+    A~B~C lands in one group even if A and C are further apart; the reported
+    ``max_distance`` makes that visible.
     """
     if algo not in ("phash", "dhash"):
         raise ValueError("algo must be 'phash' or 'dhash'")
@@ -185,6 +198,8 @@ def group_photos(
     reps = list(first_with.values())
     pairs = find_pairs([getattr(ok[i], algo) for i in reps], threshold, method=method)
     edges += [(reps[i], reps[j]) for i, j, _ in pairs]
+    if max_colour is not None:
+        edges = [(a, b) for a, b in edges if _colour_ok(ok[a], ok[b], max_colour)]
 
     # Byte-identical files always belong together, whatever the hash says.
     by_digest: dict[str, int] = {}
@@ -209,11 +224,18 @@ def group_photos(
     return groups
 
 
+def _colour_ok(a: Photo, b: Photo, limit: float) -> bool:
+    if a.colour is None or b.colour is None:
+        return True
+    return colour_distance(a.colour, b.colour) <= limit
+
+
 def scan(
     root: Path,
     threshold: int = 10,
     algo: str = "phash",
     method: str = "auto",
+    max_colour: Optional[float] = DEFAULT_MAX_COLOUR,
     workers: Optional[int] = None,
     cache: Optional[HashCache] = None,
     exclude: Sequence[Path] = (),
@@ -225,6 +247,7 @@ def scan(
     paths = list(iter_images(root, exclude=exclude))
     photos = hash_files(paths, workers=workers, cache=cache, progress=progress)
     fill_digests([p for p in photos if p.ok])
-    groups = group_photos(photos, threshold=threshold, algo=algo, method=method)
+    groups = group_photos(photos, threshold=threshold, algo=algo, method=method,
+                          max_colour=max_colour)
     errors = [p for p in photos if not p.ok]
     return ScanResult(photos, groups, errors)

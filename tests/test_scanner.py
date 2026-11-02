@@ -136,3 +136,20 @@ def test_many_identical_hashes_group_in_linear_time():
     photos.append(Photo("other.jpg", 5, 0, 100, 100, (1 << 64) - 1, (1 << 64) - 1, 1.0))
     (g,) = group_photos(photos, threshold=10)
     assert len(g.members) == 20000
+
+
+def test_colour_check_rejects_same_layout_different_colours(tmp_path):
+    from PIL import Image
+
+    from twinpix.demo import make_scene
+
+    img = make_scene(4).resize((400, 300))
+    r, g, b = img.split()
+    img.save(tmp_path / "original.jpg", quality=92)
+    Image.merge("RGB", (b, r, g)).save(tmp_path / "recoloured.jpg", quality=92)
+    img.resize((200, 150)).save(tmp_path / "small copy.jpg", quality=80)
+
+    names = lambda res: [sorted(Path(p.path).name for p in g.members) for g in res.groups]
+    assert names(scan(tmp_path, workers=1)) == [["original.jpg", "small copy.jpg"]]
+    loose = scan(tmp_path, workers=1, max_colour=None)
+    assert names(loose) == [["original.jpg", "recoloured.jpg", "small copy.jpg"]]

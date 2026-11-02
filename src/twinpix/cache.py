@@ -15,7 +15,7 @@ from typing import Iterable, Optional
 
 from .model import Photo
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 def default_cache_path() -> Path:
@@ -36,29 +36,35 @@ class HashCache:
         self.path = Path(path) if path else default_cache_path()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.db = sqlite3.connect(self.path)
+        cols = [r[1] for r in self.db.execute("PRAGMA table_info(photos)")]
+        if cols and "colour" not in cols:  # cache from an older version: start over
+            self.db.execute("DROP TABLE photos")
         self.db.execute(
             """CREATE TABLE IF NOT EXISTS photos (
                 path TEXT PRIMARY KEY, version INTEGER, size INTEGER, mtime_ns INTEGER,
-                width INTEGER, height INTEGER, dhash TEXT, phash TEXT, sharpness REAL)"""
+                width INTEGER, height INTEGER, dhash TEXT, phash TEXT, sharpness REAL,
+                colour TEXT)"""
         )
 
     def get(self, path: str, size: int, mtime_ns: int) -> Optional[Photo]:
         row = self.db.execute(
-            "SELECT width, height, dhash, phash, sharpness FROM photos "
+            "SELECT width, height, dhash, phash, sharpness, colour FROM photos "
             "WHERE path=? AND version=? AND size=? AND mtime_ns=?",
             (path, SCHEMA_VERSION, size, mtime_ns),
         ).fetchone()
         if row is None:
             return None
-        w, h, dh, ph, sharp = row
-        return Photo(path, size, mtime_ns, w, h, int(dh, 16), int(ph, 16), sharp)
+        w, h, dh, ph, sharp, colour = row
+        return Photo(path, size, mtime_ns, w, h, int(dh, 16), int(ph, 16), sharp,
+                     bytes.fromhex(colour) if colour else None)
 
     def put_many(self, photos: Iterable[Photo]) -> None:
         self.db.executemany(
-            "INSERT OR REPLACE INTO photos VALUES (?,?,?,?,?,?,?,?,?)",
+            "INSERT OR REPLACE INTO photos VALUES (?,?,?,?,?,?,?,?,?,?)",
             [
                 (p.path, SCHEMA_VERSION, p.size, p.mtime_ns, p.width, p.height,
-                 f"{p.dhash:016x}", f"{p.phash:016x}", p.sharpness)
+                 f"{p.dhash:016x}", f"{p.phash:016x}", p.sharpness,
+                 p.colour.hex() if p.colour else None)
                 for p in photos
                 if p.ok
             ],

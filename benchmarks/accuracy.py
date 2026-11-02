@@ -4,7 +4,8 @@
     python benchmarks/accuracy.py demo_photos
 
 Reports pairwise precision/recall (a "pair" is two files that belong to the
-same scene) for each hash algorithm over a sweep of thresholds.
+same scene) for each hash algorithm over a sweep of thresholds, with and
+without the colour verification step.
 """
 
 from __future__ import annotations
@@ -14,7 +15,9 @@ import itertools
 import json
 from pathlib import Path
 
-from twinpix.scanner import fill_digests, group_photos, hash_files, iter_images
+from twinpix.scanner import (
+    DEFAULT_MAX_COLOUR, fill_digests, group_photos, hash_files, iter_images,
+)
 
 
 def pair_scores(truth: dict[str, list[str]], root: Path, groups) -> tuple[float, float, int, int]:
@@ -42,13 +45,16 @@ def main() -> None:
     photos = hash_files(list(iter_images(root)))
     fill_digests(photos)
     print(f"{len(photos)} photos, {len(truth)} scenes\n")
-    print("| algo  | threshold | precision | recall | false pairs | missed pairs |")
-    print("|-------|----------:|----------:|-------:|------------:|-------------:|")
+    print("| algo | colour check | threshold | precision | recall | false pairs | missed pairs |")
+    print("|------|:------------:|----------:|----------:|-------:|------------:|-------------:|")
     for algo in ("phash", "dhash"):
-        for t in map(int, args.thresholds.split(",")):
-            groups = group_photos(photos, threshold=t, algo=algo)
-            p, r, fp, fn = pair_scores(truth, root, groups)
-            print(f"| {algo} | {t:>9} | {p:>9.3f} | {r:>6.3f} | {fp:>11} | {fn:>12} |")
+        for colour in (False, True):
+            for t in map(int, args.thresholds.split(",")):
+                groups = group_photos(photos, threshold=t, algo=algo,
+                                      max_colour=DEFAULT_MAX_COLOUR if colour else None)
+                p, r, fp, fn = pair_scores(truth, root, groups)
+                print(f"| {algo} | {'yes' if colour else 'no'} | {t} | {p:.3f} | {r:.3f} "
+                      f"| {fp} | {fn} |")
 
 
 if __name__ == "__main__":

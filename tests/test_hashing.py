@@ -122,3 +122,27 @@ def test_open_image_uses_reduced_jpeg_decode(tmp_path, scene):
     img, full = open_image(path, target=256)
     assert full == scene.size
     assert img.width < scene.width  # decoded at reduced scale
+
+
+def test_colour_signature_ignores_exposure_but_not_hue(scene):
+    from twinpix.hashing import colour_distance, colour_signature
+
+    base = colour_signature(scene)
+    assert len(base) == 32
+    brighter = colour_signature(ImageEnhance.Brightness(scene).enhance(1.25))
+    smaller = colour_signature(jpeg_roundtrip(scene.resize((320, 240)), 40))
+    assert colour_distance(base, brighter) < 0.02
+    assert colour_distance(base, smaller) < 0.02
+    r, g, b = scene.split()
+    swapped = colour_signature(Image.merge("RGB", (b, r, g)))  # same layout, new colours
+    assert colour_distance(base, swapped) > 0.04
+    assert colour_distance(base, base) == 0.0
+
+
+@pytest.mark.parametrize("mode", ["1", "L", "LA", "P", "RGBA", "CMYK", "I;16", "F"])
+def test_colour_signature_handles_every_mode(mode, scene):
+    from twinpix.hashing import colour_signature
+
+    small = scene.resize((64, 48))
+    img = small.convert("L").convert(mode) if mode in ("I;16", "F") else small.convert(mode)
+    assert len(colour_signature(img)) == 32

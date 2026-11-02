@@ -1,11 +1,11 @@
-"""Benchmark all-pairs search: BK-tree vs vectorised brute force vs naive Python.
+"""Benchmark all-pairs search: multi-index hashing vs BK-tree vs brute force.
 
     python benchmarks/bench_index.py --out docs/img/benchmark.png
 
 Hashes are synthetic but shaped like a real library: most photos are unique
 (uniform random 64-bit hashes) and ~30 % belong to small clusters of 2-6
 near-copies (a few flipped bits each). Distance computations are counted as
-well as wall time, because the count is what the BK-tree actually saves.
+well as wall time, because the count is what an index actually saves.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ import argparse
 import random
 import time
 
-from twinpix.index import bktree_pairs, brute_force_pairs
+from twinpix.index import bktree_pairs, brute_force_pairs, mih_pairs
 
 
 def library_hashes(n: int, seed: int = 0) -> list[int]:
@@ -54,26 +54,34 @@ def main() -> None:
     ap.add_argument("--sizes", default="1000,2000,5000,10000,20000,50000,100000")
     ap.add_argument("--radii", default="6,10")
     ap.add_argument("--naive-max", type=int, default=5000)
+    ap.add_argument("--bktree-max", type=int, default=20000)
     ap.add_argument("--out", default=None, help="write a PNG chart here")
     args = ap.parse_args()
     sizes = [int(s) for s in args.sizes.split(",")]
     radii = [int(r) for r in args.radii.split(",")]
 
     rows = []
-    print("| n | radius | pairs | BK-tree | distance calls (% of n²/2) | NumPy brute force | naive Python |")
+    print("| n | radius | pairs | multi-index hashing | BK-tree | NumPy brute force | naive Python |")
     print("|--:|--:|--:|--:|--:|--:|--:|")
     for r in radii:
         for n in sizes:
             hashes = library_hashes(n)
-            t_bk, (pairs, calls) = timed(bktree_pairs, hashes, r)
+            half = n * (n - 1) / 2
+            t_mih, (pairs, checked) = timed(mih_pairs, hashes, r)
             t_bf, pairs_bf = timed(brute_force_pairs, hashes, r)
-            assert pairs == pairs_bf, "BK-tree and brute force disagree"
+            assert pairs == pairs_bf, "MIH and brute force disagree"
+            if n <= args.bktree_max:
+                t_bk, (pairs_bk, calls) = timed(bktree_pairs, hashes, r)
+                assert pairs_bk == pairs_bf, "BK-tree and brute force disagree"
+            else:
+                t_bk, calls = None, None
             t_nv = timed(naive, hashes, r)[0] if n <= args.naive_max else None
-            frac = calls / (n * (n - 1) / 2)
-            rows.append((r, n, t_bk, t_bf, t_nv, frac))
+            rows.append(dict(r=r, n=n, mih=t_mih, bk=t_bk, bf=t_bf, nv=t_nv,
+                             mih_frac=checked / half, bk_frac=calls / half if calls else None))
+            bk = f"{t_bk:.2f} s ({100 * calls / half:.0f} %)" if t_bk is not None else "-"
             nv = f"{t_nv:.2f} s" if t_nv is not None else "-"
-            print(f"| {n:,} | {r} | {len(pairs):,} | {t_bk:.2f} s | {calls:,} ({100 * frac:.1f} %) "
-                  f"| {t_bf:.2f} s | {nv} |", flush=True)
+            print(f"| {n:,} | {r} | {len(pairs):,} | {t_mih:.3f} s ({100 * checked / half:.2f} %) "
+                  f"| {bk} | {t_bf:.2f} s | {nv} |", flush=True)
 
     if args.out:
         import matplotlib
@@ -82,28 +90,28 @@ def main() -> None:
         import matplotlib.pyplot as plt
 
         fig, axes = plt.subplots(1, 2, figsize=(11, 4.2), dpi=150)
-        colors = {"bk": "#3367d6", "bf": "#e8710a", "nv": "#9aa0a6"}
+        series = [("mih", "multi-index hashing", "#1a73e8", "o"),
+                  ("bf", "NumPy brute force", "#e8710a", "s"),
+                  ("bk", "BK-tree", "#9334e6", "D"),
+                  ("nv", "naive Python loop", "#9aa0a6", "^")]
         for r, style in zip(radii, ["-", "--"]):
-            sub = [row for row in rows if row[0] == r]
-            ns = [row[1] for row in sub]
-            axes[0].plot(ns, [row[2] for row in sub], style, marker="o", color=colors["bk"],
-                         label=f"BK-tree (r={r})")
-            axes[0].plot(ns, [row[3] for row in sub], style, marker="s", color=colors["bf"],
-                         label=f"NumPy brute force (r={r})")
-            axes[1].plot(ns, [100 * row[5] for row in sub], style, marker="o", color=colors["bk"],
-                         label=f"r = {r}")
-        nv = [(row[1], row[4]) for row in rows if row[0] == radii[0] and row[4] is not None]
-        if nv:
-            axes[0].plot(*zip(*nv), ":", marker="^", color=colors["nv"], label="naive Python loop")
+            sub = [row for row in rows if row["r"] == r]
+            for key, label, color, marker in series:
+                pts = [(row["n"], row[key]) for row in sub if row[key] is not None]
+                if pts and (key != "nv" or r == radii[0]):
+                    axes[0].plot(*zip(*pts), style, marker=marker, color=color, ms=4,
+                                 label=f"{label} (r={r})" if key != "nv" else label)
+            for key, label, color, marker in series[:3:2]:
+                frac = key + "_frac"
+                pts = [(row["n"], 100 * row[frac]) for row in sub if row.get(frac) is not None]
+                axes[1].plot(*zip(*pts), style, marker=marker, color=color, ms=4,
+                             label=f"{label} (r={r})")
+        axes[1].axhline(100, color="#e8710a", lw=1, alpha=0.6)
+        axes[1].text(sizes[0], 70, "brute force = 100 %", color="#e8710a", fontsize=8)
         axes[0].set(xscale="log", yscale="log", xlabel="photos in library",
-                    ylabel="seconds to find all pairs", title="All-pairs search time")
-        axes[1].set(xscale="log", xlabel="photos in library",
-                    ylabel="% of the n(n-1)/2 comparisons", title="BK-tree distance computations")
-        axes[1].set_ylim(0, 100)
-        for ax in axes:
-            ax.grid(True, which="both", alpha=0.25)
-            ax.legend(frameon=False, fontsize=8)
-            ax.spines[["top", "right"]].set_visible(False)
+                    ylabel="seconds to find all pairs", title="All-pairs search time (lower is better)")
+        axes[1].set(xscale="log", yscale="log", xlabel="photos in library",
+                    ylabel="% of the n(n-1)/2 pairs compared", title="Comparisons actually made")
         fig.tight_layout()
         fig.savefig(args.out)
         print(f"\nchart written to {args.out}")

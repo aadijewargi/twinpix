@@ -39,22 +39,30 @@ def _bits_to_int(bits: np.ndarray) -> int:
     return value
 
 
-def to_grey(img: Image.Image) -> Image.Image:
-    """Convert any Pillow mode to 8-bit grey, flattening alpha onto white.
+def flatten(img: Image.Image) -> Image.Image:
+    """Convert any Pillow mode to 8-bit "L" or "RGB", flattening alpha onto white.
 
     Flattening matters: a transparent PNG and the same picture exported as a
-    JPEG (which has no alpha) should hash the same.
+    JPEG (which has no alpha) should hash the same. 16-bit and float images
+    are stretched to the 0-255 range.
     """
-    if img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info):
+    if img.mode in ("RGBA", "LA", "PA") or (img.mode == "P" and "transparency" in img.info):
         rgba = img.convert("RGBA")
         background = Image.new("RGBA", rgba.size, (255, 255, 255, 255))
-        img = Image.alpha_composite(background, rgba)
+        return Image.alpha_composite(background, rgba).convert("RGB")
     if img.mode in ("I;16", "I;16B", "I;16L", "I", "F"):
         arr = np.asarray(img, dtype=np.float64)
         lo, hi = float(arr.min()), float(arr.max())
         scale = 255.0 / (hi - lo) if hi > lo else 0.0
-        img = Image.fromarray(((arr - lo) * scale).astype(np.uint8))
-    return img.convert("L")
+        return Image.fromarray(((arr - lo) * scale).astype(np.uint8))
+    if img.mode in ("L", "RGB"):
+        return img
+    return img.convert("L" if img.mode == "1" else "RGB")
+
+
+def to_grey(img: Image.Image) -> Image.Image:
+    """Any Pillow image as 8-bit grey (alpha flattened onto white)."""
+    return flatten(img).convert("L")
 
 
 def dhash(img: Image.Image, hash_size: int = 8) -> int:
@@ -85,6 +93,32 @@ def phash(img: Image.Image, hash_size: int = 8, highfreq_factor: int = 4) -> int
     # The DC term (mean brightness) would dominate the median, so leave it out.
     median = np.median(low.ravel()[1:])
     return _bits_to_int(low > median)
+
+
+COLOUR_GRID = 4
+
+
+def colour_signature(img: Image.Image) -> bytes:
+    """Chromaticity of a 4x4 grid of cells, 32 bytes.
+
+    Perceptual hashes only see brightness, so two different pictures with a
+    similar light/dark layout (a ball on a table, say) can collide. Each cell
+    stores its (r, g) chromaticity, r/(r+g+b) and g/(r+g+b), which ignores
+    overall brightness, so an exposure-edited copy still matches while a
+    differently coloured scene does not.
+    """
+    rgb = flatten(img).convert("RGB")
+    small = rgb.resize((COLOUR_GRID, COLOUR_GRID), Image.Resampling.BOX)
+    arr = np.asarray(small, dtype=np.float64) + 1.0
+    chroma = arr[..., :2] / arr.sum(axis=-1, keepdims=True)
+    return bytes(np.round(chroma * 255).astype(np.uint8).ravel())
+
+
+def colour_distance(a: bytes, b: bytes) -> float:
+    """Mean absolute chromaticity difference between two signatures (0-1)."""
+    x = np.frombuffer(a, dtype=np.uint8).astype(np.float64)
+    y = np.frombuffer(b, dtype=np.uint8).astype(np.float64)
+    return float(np.abs(x - y).mean() / 255.0)
 
 
 def sharpness(img: Image.Image, max_side: int = 512) -> float:
