@@ -1,0 +1,77 @@
+{
+  "radius": 12,
+  "rows": [
+    {
+      "n": 1000,
+      "pairs": 539,
+      "chunks": 7,
+      "mih_s": 0.00688178499967762,
+      "brute_s": 0.008650898999803758,
+      "bktree_s": 0.3311838889999308,
+      "bktree_visit_frac": 0.8946606606606606
+    },
+    {
+      "n": 2000,
+      "pairs": 1107,
+      "chunks": 7,
+      "mih_s": 0.01630370499970013,
+      "brute_s": 0.03354866100016807,
+      "bktree_s": 1.2691338080003334,
+      "bktree_visit_frac": 0.8838619309654827
+    },
+    {
+      "n": 5000,
+      "pairs": 2828,
+      "chunks": 7,
+      "mih_s": 0.04555215600021256,
+      "brute_s": 0.19293641799959005,
+      "bktree_s": 7.7756427179997445,
+      "bktree_visit_frac": 0.8732415283056612
+    },
+    {
+      "n": 10000,
+      "pairs": 5787,
+      "chunks": 7,
+      "mih_s": 0.14390134800032683,
+      "brute_s": 0.6587246980002419,
+      "bktree_s": null,
+      "bktree_visit_frac": null
+    },
+    {
+      "n": 20000,
+      "pairs": 11684,
+      "chunks": 7,
+      "mih_s": 0.4555851390000498,
+      "brute_s": 2.1303826439998375,
+      "bktree_s": null,
+      "bktree_visit_frac": null
+    },
+    {
+      "n": 50000,
+      "pairs": 29057,
+      "chunks": 5,
+      "mih_s": 3.0024576760001764,
+      "brute_s": 17.290573322,
+      "bktree_s": null,
+      "bktree_visit_frac": null
+    },
+    {
+      "n": 100000,
+      "pairs": 59063,
+      "chunks": 5,
+      "mih_s": 12.383460322999781,
+      "brute_s": null,
+      "bktree_s": null,
+      "bktree_visit_frac": null
+    },
+    {
+      "n": 200000,
+      "pairs": 121947,
+      "chunks": 5,
+      "mih_s": 47.56869051600006,
+      "brute_s": null,
+      "bktree_s": null,
+      "bktree_visit_frac": null
+    }
+  ]
+}
