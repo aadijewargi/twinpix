@@ -28,6 +28,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from itertools import combinations
+from math import comb
 from typing import List, Sequence, Tuple
 
 import numpy as np
@@ -110,7 +111,7 @@ def mih_cost(n: int, radius: int, m: int) -> float:
     s = radius // m
     total = 0.0
     for _, b in _chunk_layout(m):
-        probes = len(_flip_masks(b, min(s, b)))
+        probes = sum(comb(b, k) for k in range(min(s, b) + 1))
         total += probes * (n * np.log2(max(n, 2)) * 0.5 + n * n / 2 ** b)
     return total
 
@@ -119,13 +120,22 @@ def choose_chunks(n: int, radius: int) -> int:
     return min(range(2, 9), key=lambda m: mih_cost(n, radius, m))
 
 
+def mih_worthwhile(n: int, radius: int) -> bool:
+    """MIH only pays off when its probe tables stay small relative to N^2."""
+    return mih_cost(n, radius, choose_chunks(n, radius)) < 0.5 * n * n
+
+
 def pairs_mih(h: np.ndarray, radius: int, m: int = 0, max_candidates: int = 1 << 22) -> Pairs:
     n = len(h)
     if n < 2:
         return _empty()
     if m <= 0:
+        if not mih_worthwhile(n, radius):  # e.g. huge radius: probing would explode
+            return pairs_brute(h, radius)
         m = choose_chunks(n, radius)
     s = radius // m
+    if sum(comb(b, k) for _, b in _chunk_layout(m) for k in range(min(s, b) + 1)) > 4 * n * n + 1024:
+        return pairs_brute(h, radius)
     idx = np.arange(n, dtype=np.int64)
     out_i, out_j, out_d = [], [], []
     for off, bits in _chunk_layout(m):
