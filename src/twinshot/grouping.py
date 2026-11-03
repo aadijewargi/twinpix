@@ -7,11 +7,11 @@ from dataclasses import dataclass, field
 from functools import cmp_to_key
 from typing import Dict, List, Sequence, Tuple
 
-from .bktree import all_pairs_within
 from .hashing import Fingerprint, hamming
+from .search import all_pairs
 
-DEFAULT_PHASH_RADIUS = 10
-DEFAULT_DHASH_RADIUS = 12
+DEFAULT_PHASH_RADIUS = 12
+DEFAULT_DHASH_RADIUS = 14
 
 
 class UnionFind:
@@ -49,15 +49,17 @@ def matching_pairs(
     fps: Sequence[Fingerprint],
     phash_radius: int = DEFAULT_PHASH_RADIUS,
     dhash_radius: int = DEFAULT_DHASH_RADIUS,
+    method: str = "auto",
 ) -> List[Tuple[int, int, int]]:
     """Pairs that are close in pHash (via the BK-tree) *and* confirmed by dHash.
 
-    pHash is the candidate generator: it is the most robust to resizing and
+    pHash is the candidate generator (multi-index hashing or vectorised brute
+    force, see ``search.py``): it is the most robust to resizing and
     re-compression. dHash looks at a different feature (local gradients), so
     requiring both cuts false positives from images that merely share a
     similar low-frequency layout (two different sunsets, say).
     """
-    pairs = all_pairs_within([f.phash for f in fps], phash_radius)
+    pairs = all_pairs([f.phash for f in fps], phash_radius, method=method)
     return [
         (i, j, d)
         for i, j, d in pairs
@@ -105,22 +107,28 @@ def _compare_quality(a: Fingerprint, b: Fingerprint) -> Tuple[int, str]:
         return -1, "highest resolution"
     if b.pixels > a.pixels * 1.05:
         return 1, "highest resolution"
-    # 2. Same size: the sharpest frame wins (bursts, focus misses).
+    # 2. Colour beats a black-and-white conversion of the same shot.
+    GRAY = 3.0
+    if a.colorfulness > GRAY >= b.colorfulness:
+        return -1, "in colour"
+    if b.colorfulness > GRAY >= a.colorfulness:
+        return 1, "in colour"
+    # 3. Same size: the sharpest frame wins (bursts, focus misses).
     if a.sharpness > b.sharpness * 1.10:
         return -1, "sharpest"
     if b.sharpness > a.sharpness * 1.10:
         return 1, "sharpest"
-    # 3. Larger file at the same size = less aggressive compression.
+    # 4. Larger file at the same size = less aggressive compression.
     if a.bytes > b.bytes * 1.02:
         return -1, "least compressed"
     if b.bytes > a.bytes * 1.02:
         return 1, "least compressed"
-    # 4. Oldest file is most likely the original.
+    # 5. Oldest file is most likely the original.
     if a.mtime < b.mtime:
         return -1, "oldest (likely original)"
     if b.mtime < a.mtime:
         return 1, "oldest (likely original)"
-    # 5. Deterministic tie-break: shortest path, then alphabetical.
+    # 6. Deterministic tie-break: shortest path, then alphabetical.
     ka, kb = (len(a.path), a.path), (len(b.path), b.path)
     if ka == kb:
         return 0, "tie"
@@ -183,11 +191,12 @@ def find_groups(
     dhash_radius: int = DEFAULT_DHASH_RADIUS,
     linkage: str = "complete",
     check_exact: bool = True,
+    method: str = "auto",
 ) -> List[Group]:
     """Cluster fingerprints into duplicate groups (singletons are dropped)."""
     if linkage not in ("single", "complete"):
         raise ValueError("linkage must be 'single' or 'complete'")
-    pairs = matching_pairs(fps, phash_radius, dhash_radius)
+    pairs = matching_pairs(fps, phash_radius, dhash_radius, method)
     uf = UnionFind(len(fps))
     adj: Dict[int, set] = {}
     for i, j, _ in pairs:

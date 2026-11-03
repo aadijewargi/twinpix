@@ -6,9 +6,13 @@ triangle inequality says any match ``x`` in the child subtree keyed ``k``
 satisfies ``|d - k| <= r``. So only children with keys in ``[d - r, d + r]``
 need visiting; the rest of the tree is pruned.
 
-With 64-bit hashes and small radii (~10) a query touches a small fraction of
-the nodes, so finding all near-duplicate pairs among N photos costs far fewer
-than the N^2/2 comparisons of a brute-force scan.
+This works beautifully for small radii (a few bits). At the radii photo
+de-duplication needs (~12 of 64 bits) it degrades badly: perceptual-hash
+distances between unrelated photos concentrate around 32 +/- 4 bits, so the
+window [d - r, d + r] admits nearly every child and a query visits ~85% of the
+tree (measured in ``bench/speed.py``). twinshot therefore uses multi-index
+hashing (``search.py``) by default and keeps the BK-tree as an alternative
+engine (``--search bktree``) and a benchmark baseline.
 """
 
 from __future__ import annotations

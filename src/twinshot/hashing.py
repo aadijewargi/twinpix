@@ -92,11 +92,13 @@ def phash(img: Image.Image, hash_size: int = 8, highfreq_factor: int = 4) -> int
 
 
 def sharpness(img: Image.Image, side: int = 256) -> float:
-    """Variance of the Laplacian on a fixed-size grayscale copy.
+    """Contrast-normalised variance of the Laplacian.
 
-    Higher means more fine detail. Computed at a fixed resolution so that
-    a downscaled copy and the original are compared on equal footing; used to
-    pick the best frame from a burst.
+    Higher means more fine detail; used to pick the best frame from a burst.
+    Computed at a fixed resolution so a downscaled copy and the original are
+    compared on equal footing, and divided by the image's own intensity
+    variance so a brightened or contrast-boosted edit does not look "sharper"
+    than the original just because its gradients got bigger.
     """
     px = to_gray_array(img, (side, side))
     lap = (
@@ -106,7 +108,15 @@ def sharpness(img: Image.Image, side: int = 256) -> float:
         + px[1:-1, :-2]
         + px[1:-1, 2:]
     )
-    return float(lap.var())
+    return float(100.0 * lap.var() / (px.var() + 1e-6))
+
+
+def colorfulness(img: Image.Image, side: int = 64) -> float:
+    """Hasler & Suesstrunk (2003) colourfulness; ~0 for black-and-white images."""
+    rgb = np.asarray(img.convert("RGB").resize((side, side), _RESAMPLE), dtype=np.float64)
+    r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
+    rg, yb = r - g, 0.5 * (r + g) - b
+    return float(np.hypot(rg.std(), yb.std()) + 0.3 * np.hypot(rg.mean(), yb.mean()))
 
 
 def _flatten_alpha(img: Image.Image) -> Image.Image:
@@ -158,6 +168,7 @@ class Fingerprint:
     phash: int
     dhash: int
     sharpness: float
+    colorfulness: float = 0.0
 
     @property
     def pixels(self) -> int:
@@ -185,4 +196,5 @@ def fingerprint(path: PathLike) -> Fingerprint:
         phash=phash(rgb),
         dhash=dhash(rgb),
         sharpness=sharpness(rgb),
+        colorfulness=colorfulness(rgb),
     )

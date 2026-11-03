@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "twinshot"
 version = "0.1.0"
-description = "Find near-duplicate photos (bursts, resizes, re-saves) with perceptual hashing and a BK-tree, review them in an HTML report, and quarantine rejects safely."
+description = "Find near-duplicate photos (bursts, resizes, re-saves) with perceptual hashing and multi-index hashing, review them in an HTML report, and quarantine rejects safely."
 readme = "README.md"
 license = { text = "MIT" }
 authors = [{ name = "aadijewargi" }]
