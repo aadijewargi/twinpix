@@ -7,6 +7,7 @@ import os
 import sys
 import time
 import webbrowser
+from pathlib import Path
 from typing import List, Optional
 
 from . import __version__
@@ -89,7 +90,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
     print(f"Plan:   {os.path.abspath(args.plan)}")
     print("Review the report, then run:  twinshot apply " + _quote(args.plan))
     if args.open:
-        webbrowser.open("file://" + os.path.abspath(args.report).replace("\\", "/"))
+        webbrowser.open(Path(os.path.abspath(args.report)).as_uri())
     return 0
 
 
