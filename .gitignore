@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.twinshot-cache.sqlite
+bench/_data/
+*.html.tmp
+twinshot-report.html
+twinshot-plan.json
+twinshot-quarantine/
