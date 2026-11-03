@@ -92,13 +92,14 @@ def phash(img: Image.Image, hash_size: int = 8, highfreq_factor: int = 4) -> int
 
 
 def sharpness(img: Image.Image, side: int = 256) -> float:
-    """Contrast-normalised variance of the Laplacian.
+    """Blur-sensitive, brightness-insensitive detail score.
 
-    Higher means more fine detail; used to pick the best frame from a burst.
+    Variance of the Laplacian (second derivative, dominated by the finest
+    detail) divided by the mean squared gradient (first derivative, which
+    blur damps far less). Blur lowers the score; scaling intensities by a
+    brightness/contrast edit changes both terms equally and cancels out.
     Computed at a fixed resolution so a downscaled copy and the original are
-    compared on equal footing, and divided by the image's own intensity
-    variance so a brightened or contrast-boosted edit does not look "sharper"
-    than the original just because its gradients got bigger.
+    compared on equal footing; used to pick the best frame of a burst.
     """
     px = to_gray_array(img, (side, side))
     lap = (
@@ -108,7 +109,9 @@ def sharpness(img: Image.Image, side: int = 256) -> float:
         + px[1:-1, :-2]
         + px[1:-1, 2:]
     )
-    return float(100.0 * lap.var() / (px.var() + 1e-6))
+    gx = px[:-1, 1:] - px[:-1, :-1]
+    gy = px[1:, :-1] - px[:-1, :-1]
+    return float(10.0 * lap.var() / ((gx * gx + gy * gy).mean() + 1e-6))
 
 
 def colorfulness(img: Image.Image, side: int = 64) -> float:

@@ -114,9 +114,9 @@ def _compare_quality(a: Fingerprint, b: Fingerprint) -> Tuple[int, str]:
     if b.colorfulness > GRAY >= a.colorfulness:
         return 1, "in colour"
     # 3. Same size: the sharpest frame wins (bursts, focus misses).
-    if a.sharpness > b.sharpness * 1.10:
+    if a.sharpness > b.sharpness * 1.25:
         return -1, "sharpest"
-    if b.sharpness > a.sharpness * 1.10:
+    if b.sharpness > a.sharpness * 1.25:
         return 1, "sharpest"
     # 4. Larger file at the same size = less aggressive compression.
     if a.bytes > b.bytes * 1.02:
