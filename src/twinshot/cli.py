@@ -72,7 +72,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
 
     print(f"Hashed {len(fps)} photos in {t1 - t0:.1f}s, grouped in {(t2 - t1) * 1000:.0f} ms")
     if skipped:
-        print(f"Skipped {len(skipped)} unreadable file(s), e.g. {skipped[0][0]} ({skipped[0][1]})")
+        print(f"Skipped {len(skipped)} unreadable file(s), e.g. {_pretty(skipped[0][0])} ({skipped[0][1]})")
     exact = sum(1 for g in groups if g.kind == "exact")
     print(
         f"{len(groups)} duplicate group(s) ({exact} exact, {len(groups) - exact} similar): "
@@ -91,6 +91,15 @@ def cmd_scan(args: argparse.Namespace) -> int:
     if args.open:
         webbrowser.open("file://" + os.path.abspath(args.report).replace("\\", "/"))
     return 0
+
+
+def _pretty(p: str) -> str:
+    """Path relative to the current folder when it is inside it."""
+    try:
+        rel = os.path.relpath(p)
+    except ValueError:  # other drive on Windows
+        return p
+    return p if rel.startswith("..") else rel
 
 
 def _quote(p: str) -> str:
